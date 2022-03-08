@@ -41,4 +41,5 @@ void CSMain(uint3 id : SV_DispatchThreadID)
         pow(c3 / 255.0, 2.0),
         pow(c2 / 255.0, 2.0),
         pow(c1 / 255.0, 2.0)
+    );
 }
