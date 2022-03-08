@@ -35,10 +35,10 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     const uint c2 = ((color >> 16) & 0xFF);
     const uint c1 = ((color >> 24) & 0xFF);
     
+    // convert to linear
     Result[uint2(xTex, yTex)] = float4(
-        c4 / 255.0,
-        c3 / 255.0,
-        c2 / 255.0,
-        c1 / 255.0
-    );
+        pow(c4 / 255.0, 2.0),
+        pow(c3 / 255.0, 2.0),
+        pow(c2 / 255.0, 2.0),
+        pow(c1 / 255.0, 2.0)
 }
