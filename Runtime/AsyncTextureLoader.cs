@@ -7,9 +7,11 @@ using Unity.Collections;
 using UnityEngine;
 using UnityEngine.Assertions;
 using UnityEngine.Experimental.Rendering;
+using UnityEngine.UI;
 using Zomg.AsyncTextures.Types;
 using Zomg.AsyncTextures.Utils;
 using Debug = UnityEngine.Debug;
+using Object = System.Object;
 
 namespace Zomg.AsyncTextures
 {
@@ -81,7 +83,6 @@ namespace Zomg.AsyncTextures
         private readonly int _resultProp = Shader.PropertyToID("Result");
         private readonly int _inputProp = Shader.PropertyToID("Input");
 
-        private readonly CancellationTokenSource _cancellationTokenSource = new CancellationTokenSource();
         private bool _disposed;
 
         private void Init()
@@ -137,7 +138,6 @@ namespace Zomg.AsyncTextures
             if (!_disposed)
             {
                 Debug.Log("Disposing async texture loader");
-                _cancellationTokenSource.Cancel();
                 _asyncMonitor?.Dispose();
                 _computeBuffer?.Dispose();
 
@@ -150,8 +150,6 @@ namespace Zomg.AsyncTextures
 
         private async Task<ComputeBuffer> AcquireBuffer(int width, int height, CancellationToken token)
         {
-            token = CancellationTokenSource.CreateLinkedTokenSource(token, _cancellationTokenSource.Token).Token;
-
 #if ZOMG_DEBUG
             Debug.Log("Waiting for my turn...");
 #endif
@@ -235,10 +233,12 @@ namespace Zomg.AsyncTextures
         /// <param name="mipCount"></param>
         /// <param name="temporary"></param>
         /// <returns></returns>
-        public async Task<RenderTexture> AcquireTextureAsync(int width, int height, int mipCount = -1, bool temporary = false)
+        public async Task<RenderTexture> AcquireTextureAsync(int width, int height, int mipCount = -1, bool temporary = false, CancellationToken token = default)
         {
             // Switch to main thread if need be and possible
             await MainThreadRegister.Context;
+            
+            token.ThrowIfCancellationRequested();
 
             var descriptor = new RenderTextureDescriptor(width, height,
                 SystemInfo.GetCompatibleFormat(GraphicsFormat.R8G8B8A8_UNorm, FormatUsage.SetPixels), 0,
@@ -253,11 +253,24 @@ namespace Zomg.AsyncTextures
                 ? RenderTexture.GetTemporary(descriptor)
                 : new RenderTexture(descriptor);
 
+            tex.name = nameof(AsyncTextureLoader);
             if (!temporary)
             {
                 tex.Create();
+                token.Register(() =>
+                {
+                    if (tex && tex.name == nameof(AsyncTextureLoader))
+                        UnityEngine.Object.DestroyImmediate(tex);
+                });
             }
-
+            else
+            {
+                token.Register(() => 
+                {
+                    if (tex && tex.name == nameof(AsyncTextureLoader)) 
+                        tex.Release();
+                });
+            }
             return tex;
         }
 
@@ -309,9 +322,10 @@ namespace Zomg.AsyncTextures
         public async Task UploadDataAsync(RenderTexture texture, int xOffset, int yOffset, int width, int height, int mipLevel, byte[] data,
             CancellationToken token = default)
         {
-            token = CancellationTokenSource.CreateLinkedTokenSource(token, _cancellationTokenSource.Token).Token;
-
             await MainThreadRegister.Context;
+            
+            // Check for cancellation
+            token.ThrowIfCancellationRequested();
 
             // Check pre-conditions 
             Assert.IsTrue(SystemInfo.supportsComputeShaders);
@@ -381,6 +395,8 @@ namespace Zomg.AsyncTextures
 #endif
                 // Wait a frame
                 await Task.Yield();
+                
+                token.ThrowIfCancellationRequested();
 
                 if (texture.useMipMap)
                 {
@@ -407,13 +423,14 @@ namespace Zomg.AsyncTextures
         /// <param name="input"></param>
         /// <param name="mipCount"></param>
         /// <returns></returns>
-        public async Task<Texture> LoadTextureAsync(Stream input, int mipCount = -1)
+        public async Task<Texture> LoadTextureAsync(Stream input, int mipCount = -1, CancellationToken token = default)
         {
             if (SystemInfo.supportsComputeShaders)
             {
-                var image = await DecodeImageAsync(input);
-                var texture = await AcquireTextureAsync(image.Width, image.Height, mipCount);
-                await UploadDataAsync(texture, 0, 0, image.Width, image.Height, 0, image.Data);
+                var image = await DecodeImageAsync(input, token);
+                token.ThrowIfCancellationRequested();
+                var texture = await AcquireTextureAsync(image.Width, image.Height, mipCount, false, token);
+                await UploadDataAsync(texture, 0, 0, image.Width, image.Height, 0, image.Data, token);
                 return texture;
             }
             else
