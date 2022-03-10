@@ -13,15 +13,13 @@ namespace Zomg.AsyncTextures
             return Task.Run(async () =>
             {
                 var stream = input;
-
-                if (!stream.CanSeek)
+                if (!(stream is MemoryStream))
                 {
-                    // Fallback because stream has to be seekable
-                    stream = new MemoryStream();
+                    // speed up read by copying to memory
+                    stream = new MemoryStream() {Capacity = (int)input.Length};
                     await input.CopyToAsync(stream);
                     stream.Seek(0, SeekOrigin.Begin);
                 }
-
                 var img = ImageResult.FromStream(stream, ColorComponents.RedGreenBlueAlpha);
                 return new DecodedImage(img.Width, img.Height, img.Data);
             });
