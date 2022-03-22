@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -19,8 +20,10 @@ namespace Zomg.AsyncTextures
                     stream = new MemoryStream() {Capacity = (int)input.Length};
                     await input.CopyToAsync(stream);
                     stream.Seek(0, SeekOrigin.Begin);
+                    input.Close();
                 }
                 var img = ImageResult.FromStream(stream, ColorComponents.RedGreenBlueAlpha);
+                GC.Collect();
                 return new DecodedImage(img.Width, img.Height, img.Data);
             });
         }
