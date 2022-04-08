@@ -50,11 +50,6 @@ namespace Zomg.AsyncTextures
             Application.quitting += Dispose;
         }
 
-        /// <summary>
-        /// Gets or sets the decoder used for decoding images.
-        /// </summary>
-        public IAsyncImageDecoder ImageDecoder { get; set; } = new StbImageDecoder();
-
         private AsyncMonitor _asyncMonitor = new AsyncMonitor();
         private ComputeShader _computeShader;
         private ComputeBuffer _computeBuffer;
@@ -206,22 +201,24 @@ namespace Zomg.AsyncTextures
         /// Decode image using <see cref="ImageDecoder"/>.
         /// </summary>
         /// <param name="input"></param>
+        /// <param name="imageDecoder"></param>
         /// <param name="cancellationToken"></param>
         /// <returns></returns>
-        public Task<DecodedImage> DecodeImageAsync(byte[] input, CancellationToken cancellationToken = default)
+        public Task<DecodedImage> DecodeImageAsync(byte[] input, IAsyncImageDecoder imageDecoder, CancellationToken cancellationToken = default)
         {
-            return DecodeImageAsync(new MemoryStream(input), cancellationToken);
+            return DecodeImageAsync(new MemoryStream(input), imageDecoder, cancellationToken);
         }
 
         /// <summary>
-        /// Decode image using <see cref="ImageDecoder"/>.
+        /// Decode image
         /// </summary>
         /// <param name="input"></param>
+        /// <param name="imageDecoder"></param>
         /// <param name="cancellationToken"></param>
         /// <returns></returns>
-        public Task<DecodedImage> DecodeImageAsync(Stream input, CancellationToken cancellationToken = default)
+        public Task<DecodedImage> DecodeImageAsync(Stream input, IAsyncImageDecoder imageDecoder, CancellationToken cancellationToken = default)
         {
-            return ImageDecoder.DecodeImageAsync(input, cancellationToken);
+            return imageDecoder.DecodeImageAsync(input, cancellationToken);
         }
 
 
@@ -423,11 +420,11 @@ namespace Zomg.AsyncTextures
         /// <param name="input"></param>
         /// <param name="mipCount"></param>
         /// <returns></returns>
-        public async Task<Texture> LoadTextureAsync(Stream input, int mipCount = -1, CancellationToken token = default)
+        public async Task<Texture> LoadTextureAsync(Stream input, IAsyncImageDecoder imageDecoder, int mipCount = -1, CancellationToken token = default)
         {
             if (SystemInfo.supportsComputeShaders)
             {
-                var image = await DecodeImageAsync(input, token);
+                var image = await DecodeImageAsync(input, imageDecoder, token);
                 token.ThrowIfCancellationRequested();
                 var texture = await AcquireTextureAsync(image.Width, image.Height, mipCount, false, token);
                 await UploadDataAsync(texture, 0, 0, image.Width, image.Height, 0, image.Data, token);
@@ -450,9 +447,9 @@ namespace Zomg.AsyncTextures
         /// <param name="bytes"></param>
         /// <param name="mipCount"></param>
         /// <returns></returns>
-        public Task<Texture> LoadTextureAsync(byte[] bytes, int mipCount = -1)
+        public Task<Texture> LoadTextureAsync(byte[] bytes, IAsyncImageDecoder imageDecoder, int mipCount = -1)
         {
-            return LoadTextureAsync(new MemoryStream(bytes), mipCount);
+            return LoadTextureAsync(new MemoryStream(bytes), imageDecoder, mipCount);
         }
 
         #endregion
